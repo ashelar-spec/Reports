@@ -1,0 +1,88 @@
+name: Render Sheet Table Image
+
+on:
+  repository_dispatch:
+    types: [render_table]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Decode HTML & Take Screenshot
+        run: |
+          echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
+          node -e "
+            const puppeteer = require('puppeteer');
+            const fs = require('fs');
+            (async () => {
+              const htmlContent = fs.readFileSync('table.html', 'utf8');
+              const browser = await puppeteer.launch({
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+              });
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 });
+              await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+              const element = await page.\$('table');
+              await element.screenshot({ path: 'output.png' });
+              await browser.close();
+            })();
+          "
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Table Render"
+          files: output.png
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Image Card to Google Chat
+        run: |
+          # Convert repository name to lowercase for GitHub release asset URL
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_URL="https://github.com/${REPO_LOWER}/releases/download/latest/output.png?v=$(date +%s)"
+          
+          cat <<EOF > payload.json
+          {
+            "cardsV2": [
+              {
+                "cardId": "cashFlowTableCard",
+                "card": {
+                  "sections": [
+                    {
+                      "widgets": [
+                        {
+                          "image": {
+                            "imageUrl": "${IMAGE_URL}",
+                            "altText": "Cash Flow Table Image",
+                            "onClick": {
+                              "openLink": {
+                                "url": "${IMAGE_URL}"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+          EOF
+
+          curl -X POST -H "Content-Type: application/json; charset=UTF-8" --data-binary @payload.json "${{ github.event.client_payload.webhook_url }}"
