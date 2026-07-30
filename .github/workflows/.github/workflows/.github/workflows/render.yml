@@ -4,25 +4,31 @@
           
           cat <<EOF > payload.json
           {
-            "cardsV2": [{
-              "cardId": "cashFlowTableCard",
-              "card": {
-                "sections": [{
-                  "widgets": [{
-                    "image": {
-                      "imageUrl": "${IMAGE_URL}",
-                      "altText": "Cash Flow Table Image",
-                      "onClick": {
-                        "openLink": {
-                          "url": "${IMAGE_URL}"
+            "cardsV2": [
+              {
+                "cardId": "cashFlowTableCard",
+                "card": {
+                  "sections": [
+                    {
+                      "widgets": [
+                        {
+                          "image": {
+                            "imageUrl": "${IMAGE_URL}",
+                            "altText": "Cash Flow Table Image",
+                            "onClick": {
+                              "openLink": {
+                                "url": "${IMAGE_URL}"
+                              }
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
-                  }]
-                }]
+                  ]
+                }
               }
-            }]
+            ]
           }
           EOF
 
-          curl -X POST -H "Content-Type: application/json" -d @payload.json "${{ github.event.client_payload.webhook_url }}"
+          curl -X POST -H "Content-Type: application/json; charset=UTF-8" --data-binary @payload.json "${{ github.event.client_payload.webhook_url }}"
