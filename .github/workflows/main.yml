@@ -7,6 +7,8 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -23,15 +25,21 @@ jobs:
         run: |
           echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
 
-      - name: Take Screenshot with Puppeteer
+      - name: Take Screenshot
         run: node render.js
+
+      - name: Upload Image to GitHub Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "Latest Table Render"
+          files: output.png
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post Image to Google Chat Webhook
         run: |
-          # Convert output image to Base64 data URL directly for inline rendering
-          IMAGE_BASE64=$(base64 -w 0 output.png)
-          IMAGE_URL="data:image/png;base64,${IMAGE_BASE64}"
-          
+          IMAGE_URL="https://github.com/${{ github.repository }}/releases/download/v1.0.0/output.png?v=$(date +%s)"
           curl -X POST -H 'Content-Type: application/json' \
           -d '{
             "cardsV2": [{
