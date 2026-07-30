@@ -21,24 +21,25 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Save HTML Payload
+      - name: Decode & Save HTML
         run: |
-          echo '${{ github.event.client_payload.html }}' > table.html
+          echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
 
       - name: Take Screenshot
         run: node render.js
 
       - name: Upload Image to GitHub Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: v1.0.0
+          name: "Latest Table Render"
           files: output.png
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post Image to Google Chat Webhook
         run: |
-          IMAGE_URL="https://github.com/${{ github.repository }}/releases/download/latest/output.png?v=$(date +%s)"
+          IMAGE_URL="https://github.com/${{ github.repository }}/releases/download/v1.0.0/output.png?v=$(date +%s)"
           curl -X POST -H 'Content-Type: application/json' \
           -d '{
             "cardsV2": [{
