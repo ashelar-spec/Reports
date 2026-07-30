@@ -41,20 +41,22 @@ jobs:
             })();
           "
 
-      - name: Create or Update GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Publish Image to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          tag_name: latest
-          name: "Latest Table Render"
-          files: output.png
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          destination_dir: .
+          publish_branch: gh-pages
+          keep_files: false
 
       - name: Post Image Card to Google Chat
         run: |
-          # Convert repository name to lowercase for GitHub release asset URL
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          IMAGE_URL="https://github.com/${REPO_LOWER}/releases/download/latest/output.png?v=$(date +%s)"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          
+          # GitHub Pages hosted web URL
+          IMAGE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/output.png?v=$(date +%s)"
           
           cat <<EOF > payload.json
           {
