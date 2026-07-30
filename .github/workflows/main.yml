@@ -18,14 +18,31 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install Puppeteer Directly
+        run: npm install puppeteer
 
-      - name: Save HTML File
+      - name: Build HTML & Rendering Script
         run: |
           echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
+          cat << 'EOF' > render.js
+          const puppeteer = require('puppeteer');
+          const fs = require('fs');
 
-      - name: Take Screenshot
+          (async () => {
+            const htmlContent = fs.readFileSync('table.html', 'utf8');
+            const browser = await puppeteer.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 });
+            await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+            const element = await page.$('table');
+            await element.screenshot({ path: 'output.png' });
+            await browser.close();
+          })();
+          EOF
+
+      - name: Execute Puppeteer Screenshot
         run: node render.js
 
       - name: Upload Image to GitHub Release Asset
