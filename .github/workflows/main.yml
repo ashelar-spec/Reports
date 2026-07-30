@@ -53,6 +53,8 @@ jobs:
       - name: Post Image to Google Chat Webhook
         run: |
           IMAGE_URL="https://github.com/${{ github.repository }}/releases/download/v1.0.0/output.png?v=$(date +%s)"
+          SHEET_URL="${{ github.event.client_payload.sheet_url }}"
+          
           curl -X POST -H 'Content-Type: application/json' \
           -d '{
             "cardsV2": [{
@@ -66,7 +68,12 @@ jobs:
                   "widgets": [{
                     "image": {
                       "imageUrl": "'"$IMAGE_URL"'",
-                      "altText": "Exact Cash Flow Table Image"
+                      "altText": "Exact Cash Flow Table Image",
+                      "onClick": {
+                        "openLink": {
+                          "url": "'"$SHEET_URL"'"
+                        }
+                      }
                     }
                   }]
                 }]
