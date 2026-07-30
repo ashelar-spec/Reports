@@ -15,12 +15,7 @@
                   "widgets": [{
                     "image": {
                       "imageUrl": "'"$IMAGE_URL"'",
-                      "altText": "Cash Flow Table Image",
-                      "onClick": {
-                        "openLink": {
-                          "url": "'"$IMAGE_URL"'"
-                        }
-                      }
+                      "altText": "Cash Flow Table Image"
                     }
                   }]
                 }]
