@@ -12,7 +12,7 @@ const fs = require('fs');
   await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 });
   await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
-  // Crop directly to the <table> element for zero extra whitespace
+  // Crop tightly to table
   const element = await page.$('table');
   await element.screenshot({ path: 'output.png' });
 
