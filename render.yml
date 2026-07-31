@@ -33,7 +33,7 @@ jobs:
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
               });
               const page = await browser.newPage();
-              await page.setViewport({ width: 500, height: 1000, deviceScaleFactor: 1 });
+              await page.setViewport({ width: 1500, height: 500, deviceScaleFactor: 2 });
               await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
               const element = await page.\$('table');
               await element.screenshot({ path: 'output.png' });
