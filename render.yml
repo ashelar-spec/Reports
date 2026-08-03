@@ -33,15 +33,20 @@ jobs:
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
               });
               const page = await browser.newPage();
-              await page.setViewport({ width: 1500, height: 500, deviceScaleFactor: 2 });
+              await page.setViewport({ width: 1500, height: 500, deviceScaleFactor: 1 });
               await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
               const element = await page.\$('table');
               await element.screenshot({ path: 'output.png' });
               await browser.close();
             })();
           "
-
-      - name: Publish Image to GitHub Pages
+             - name: Compress PNG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y optipng
+          optipng -o2 output.png
+     
+       - name: Publish Image to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
