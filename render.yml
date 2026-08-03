@@ -35,8 +35,7 @@ jobs:
             
             const page = await browser.newPage();
             
-            // Standard compact viewport width to avoid horizontal stretching
-            await page.setViewport({ width: 200, height: 400, deviceScaleFactor: 1 });
+            await page.setViewport({ width: 850, height: 800, deviceScaleFactor: 1 });
             
             await page.setContent(\`
               <!DOCTYPE html>
@@ -46,7 +45,7 @@ jobs:
                     html, body {
                       margin: 0;
                       padding: 0;
-                      background: transparent;
+                      background: #ffffff;
                       display: inline-block;
                     }
                     table {
@@ -66,8 +65,9 @@ jobs:
             
             if (element) {
               await element.screenshot({ 
-                path: 'output.png', 
-                omitBackground: true 
+                path: 'output.jpg', 
+                type: 'jpeg', 
+                quality: 80 
               });
             } else {
               console.error('Table element not found!');
