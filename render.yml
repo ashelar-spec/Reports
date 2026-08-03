@@ -40,11 +40,11 @@ const element = await page.$('table');
 
 // 2. Take a tightly fitted screenshot directly of the table element
 await element.screenshot({ 
-  path: 'output.png',
+  path: 'output.JPEG',
   omitBackground: true // removes extra empty background area
 });
           "
-         - name: Compress PNG
+         - name: Compress JPEG
         run: |
           sudo apt-get update
           sudo apt-get install -y optipng
@@ -63,7 +63,7 @@ await element.screenshot({
         run: |
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
-          IMAGE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/output.png?v=$(date +%s)"
+          IMAGE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/output.jpeg?v=$(date +%s)"
           
           curl -X POST -H "Content-Type: application/json; charset=UTF-8" \
           -d "{\"text\": \"${IMAGE_URL}\"}" \
