@@ -35,11 +35,23 @@ jobs:
             
             const page = await browser.newPage();
             
-            // Inject inline styles to prevent table stretching
+            // Set standard base viewport
+            await page.setViewport({ width: 1200, height: 800, deviceScaleFactor: 1 });
+            
+            // Inject scaling styles to shrink font and cell sizes overall
             await page.setContent(\`
               <style>
-                html, body { margin: 0; padding: 0; display: inline-block; background: transparent; }
-                table { width: auto !important; max-width: fit-content !important; border-collapse: collapse; }
+                html, body { 
+                  margin: 0; 
+                  padding: 0; 
+                  display: inline-block; 
+                  background: transparent; 
+                }
+                table { 
+                  transform: scale(0.6) !important; 
+                  transform-origin: 0 0 !important; 
+                  border-collapse: collapse; 
+                }
               </style>
               \${htmlContent}
             \`, { waitUntil: 'networkidle0' });
@@ -47,14 +59,6 @@ jobs:
             const element = await page.\$('table');
             
             if (element) {
-              // Dynamically shrink-wrap viewport around the exact table bounds
-              const boundingBox = await element.boundingBox();
-              await page.setViewport({
-                width: Math.ceil(boundingBox.width),
-                height: Math.ceil(boundingBox.height),
-                deviceScaleFactor: 1
-              });
-              
               await element.screenshot({ path: 'output.png', omitBackground: true });
             } else {
               console.error('Table element not found!');
@@ -63,7 +67,3 @@ jobs:
             await browser.close();
           })();
           "
-          
-          curl -X POST -H "Content-Type: application/json; charset=UTF-8" \
-          -d "{\"text\": \"${IMAGE_URL}\"}" \
-          "${{ github.event.client_payload.webhook_url }}"
