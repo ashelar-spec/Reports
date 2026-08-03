@@ -35,31 +35,40 @@ jobs:
             
             const page = await browser.newPage();
             
-            // Set standard base viewport
-            await page.setViewport({ width: 1200, height: 800, deviceScaleFactor: 1 });
+            // Standard compact viewport width to avoid horizontal stretching
+            await page.setViewport({ width: 850, height: 800, deviceScaleFactor: 1 });
             
-            // Inject scaling styles to shrink font and cell sizes overall
             await page.setContent(\`
-              <style>
-                html, body { 
-                  margin: 0; 
-                  padding: 0; 
-                  display: inline-block; 
-                  background: transparent; 
-                }
-                table { 
-                  transform: scale(0.6) !important; 
-                  transform-origin: 0 0 !important; 
-                  border-collapse: collapse; 
-                }
-              </style>
-              \${htmlContent}
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <style>
+                    html, body {
+                      margin: 0;
+                      padding: 0;
+                      background: transparent;
+                      display: inline-block;
+                    }
+                    table {
+                      border-collapse: collapse !important;
+                      width: auto !important;
+                      max-width: fit-content !important;
+                    }
+                  </style>
+                </head>
+                <body>
+                  \${htmlContent}
+                </body>
+              </html>
             \`, { waitUntil: 'networkidle0' });
 
             const element = await page.\$('table');
             
             if (element) {
-              await element.screenshot({ path: 'output.png', omitBackground: true });
+              await element.screenshot({ 
+                path: 'output.png', 
+                omitBackground: true 
+              });
             } else {
               console.error('Table element not found!');
             }
