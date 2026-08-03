@@ -36,7 +36,7 @@ jobs:
             const page = await browser.newPage();
             
             // Standard compact viewport width to avoid horizontal stretching
-            await page.setViewport({ width: 850, height: 800, deviceScaleFactor: 1 });
+            await page.setViewport({ width: 200, height: 400, deviceScaleFactor: 1 });
             
             await page.setContent(\`
               <!DOCTYPE html>
