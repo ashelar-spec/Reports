@@ -25,45 +25,44 @@ jobs:
         run: |
           echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
           node -e "
-            const puppeteer = require('puppeteer');
-            const fs = require('fs');
-            (async () => {
-              const htmlContent = fs.readFileSync('table.html', 'utf8');
-              const browser = await puppeteer.launch({
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
+          const puppeteer = require('puppeteer');
+          const fs = require('fs');
+          (async () => {
+            const htmlContent = fs.readFileSync('table.html', 'utf8');
+            const browser = await puppeteer.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            
+            const page = await browser.newPage();
+            
+            // Inject inline styles to prevent table stretching
+            await page.setContent(\`
+              <style>
+                html, body { margin: 0; padding: 0; display: inline-block; background: transparent; }
+                table { width: auto !important; max-width: fit-content !important; border-collapse: collapse; }
+              </style>
+              \${htmlContent}
+            \`, { waitUntil: 'networkidle0' });
+
+            const element = await page.\$('table');
+            
+            if (element) {
+              // Dynamically shrink-wrap viewport around the exact table bounds
+              const boundingBox = await element.boundingBox();
+              await page.setViewport({
+                width: Math.ceil(boundingBox.width),
+                height: Math.ceil(boundingBox.height),
+                deviceScaleFactor: 1
               });
-              const page = await browser.newPage();
-await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+              
+              await element.screenshot({ path: 'output.png', omitBackground: true });
+            } else {
+              console.error('Table element not found!');
+            }
 
-// 1. Target the table element
-const element = await page.$('table');
-
-// 2. Take a tightly fitted screenshot directly of the table element
-await element.screenshot({ 
-  path: 'output.JPEG',
-  omitBackground: true // removes extra empty background area
-});
+            await browser.close();
+          })();
           "
-         - name: Compress JPEG
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y optipng
-          optipng -o2 output.png
-     
-       - name: Publish Image to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
-          destination_dir: .
-          publish_branch: gh-pages
-          keep_files: false
-
-      - name: Post Native Image to Google Chat
-        run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
-          IMAGE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/output.jpeg?v=$(date +%s)"
           
           curl -X POST -H "Content-Type: application/json; charset=UTF-8" \
           -d "{\"text\": \"${IMAGE_URL}\"}" \
