@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+const path = require('path');
 
 (async () => {
   let browser;
@@ -10,47 +11,53 @@ const puppeteer = require('puppeteer');
 
     const page = await browser.newPage();
 
-    // 1. Set viewport scale
-    await page.setViewport({
-      width: 800,
-      height: 600,
-      deviceScaleFactor: 1
-    });
+    // 1. If you load an HTML file, load it here (update file name if needed)
+    // If you use page.setContent or open a URL, keep your existing loading line here!
+    const filePath = path.join(__dirname, 'render.html'); 
+    await page.goto(`file://${filePath}`, { waitUntil: 'networkidle0' });
 
-    // --- YOUR EXISTING DATA / PAGE LOADING CODE HERE ---
-    // (e.g., page.goto or page.setContent)
-    
-    // 2. Wait for table to load
+    // 2. Wait for table
     await page.waitForSelector('table');
 
-    // 3. Inject CSS styling directly onto the page dynamically
+    // 3. Inject CSS to kill full-width stretching and dark backgrounds
     await page.addStyleTag({
       content: `
-        body {
-          background-color: transparent !important;
+        html, body {
+          background: transparent !important;
+          width: max-content !important;
           margin: 0 !important;
           padding: 0 !important;
         }
         table {
-          width: 650px !important;      /* Controls preview size */
-          font-size: 13px !important;    /* Keeps text sharp & readable */
-          border-collapse: collapse !important;
+          display: inline-block !important;
+          width: auto !important;
+          max-width: none !important;
           margin: 0 !important;
         }
       `
     });
 
-    // 4. Find table element and grab clean screenshot
+    // 4. Get the exact table element
     const tableElement = await page.$('table');
 
-    if (tableElement) {
+    // 5. Get table's precise pixel dimensions
+    const boundingBox = await tableElement.boundingBox();
+
+    if (boundingBox) {
+      // 6. Screenshot ONLY the bounding box region with transparent background
       await tableElement.screenshot({
         path: 'output.png',
-        omitBackground: true
+        omitBackground: true, // Strips out the black background completely
+        clip: {
+          x: boundingBox.x,
+          y: boundingBox.y,
+          width: boundingBox.width,
+          height: boundingBox.height
+        }
       });
-      console.log('Successfully generated preview image!');
+      console.log('Image generated successfully without black side bars!');
     } else {
-      console.error('Table element not found.');
+      console.error('Could not find table bounding box.');
     }
 
   } catch (error) {
