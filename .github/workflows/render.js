@@ -46,7 +46,7 @@ const path = require('path');
     if (boundingBox) {
       // 6. Screenshot ONLY the bounding box region with transparent background
       await tableElement.screenshot({
-        path: 'output.png',
+        path: 'output_v2.png',
         omitBackground: true, // Strips out the black background completely
         clip: {
           x: boundingBox.x,
