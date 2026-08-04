@@ -3,12 +3,14 @@ name: Render Sheet Table Image
 on:
   repository_dispatch:
     types: [render_table]
+  workflow_dispatch: # Allows manual trigger from Actions tab
 
 jobs:
   render:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,61 +20,16 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Puppeteer
-        run: npm install puppeteer
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Decode HTML & Take Screenshot
+      - name: Run Render Script
+        run: node render.js
+
+      - name: Commit and Push Updated Image
         run: |
-          echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
-          node -e "
-          const puppeteer = require('puppeteer');
-          const fs = require('fs');
-          (async () => {
-            const htmlContent = fs.readFileSync('table.html', 'utf8');
-            const browser = await puppeteer.launch({
-              args: ['--no-sandbox', '--disable-setuid-sandbox']
-            });
-            
-            const page = await browser.newPage();
-            
-            await page.setViewport({ width: 850, height: 800, deviceScaleFactor: 1 });
-            
-            await page.setContent(\`
-              <!DOCTYPE html>
-              <html>
-                <head>
-                  <style>
-                    html, body {
-                      margin: 0;
-                      padding: 0;
-                      background: #ffffff;
-                      display: inline-block;
-                    }
-                    table {
-                      border-collapse: collapse !important;
-                      width: auto !important;
-                      max-width: fit-content !important;
-                    }
-                  </style>
-                </head>
-                <body>
-                  \${htmlContent}
-                </body>
-              </html>
-            \`, { waitUntil: 'networkidle0' });
-
-            const element = await page.\$('table');
-            
-            if (element) {
-              await element.screenshot({ 
-                path: 'output.jpg', 
-                type: 'jpeg', 
-                quality: 80 
-              });
-            } else {
-              console.error('Table element not found!');
-            }
-
-            await browser.close();
-          })();
-          "
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add output.png
+          git commit -m "Update rendered table image" || exit 0
+          git push
