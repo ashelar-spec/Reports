@@ -1,5 +1,4 @@
 const puppeteer = require('puppeteer');
-const path = require('path');
 
 (async () => {
   let browser;
@@ -11,28 +10,45 @@ const path = require('path');
 
     const page = await browser.newPage();
 
-    // 1. Force standard 1:1 screen resolution so previewers scale it properly
+    // 1. Set viewport scale
     await page.setViewport({
       width: 800,
       height: 600,
-      deviceScaleFactor: 1 // Crucial for clean chat/email preview scaling
+      deviceScaleFactor: 1
     });
 
-    // 2. Load your file
-    const filePath = path.join(__dirname, 'render.html'); // Adjust file name if needed
-    await page.goto(`file://${filePath}`, { waitUntil: 'networkidle0' });
-
-    // 3. Wait for the table
+    // --- YOUR EXISTING DATA / PAGE LOADING CODE HERE ---
+    // (e.g., page.goto or page.setContent)
+    
+    // 2. Wait for table to load
     await page.waitForSelector('table');
+
+    // 3. Inject CSS styling directly onto the page dynamically
+    await page.addStyleTag({
+      content: `
+        body {
+          background-color: transparent !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        table {
+          width: 650px !important;      /* Controls preview size */
+          font-size: 13px !important;    /* Keeps text sharp & readable */
+          border-collapse: collapse !important;
+          margin: 0 !important;
+        }
+      `
+    });
+
+    // 4. Find table element and grab clean screenshot
     const tableElement = await page.$('table');
 
     if (tableElement) {
-      // 4. Take a clean, cropped screenshot of ONLY the table
       await tableElement.screenshot({
         path: 'output.png',
         omitBackground: true
       });
-      console.log('Image successfully rendered for chat preview!');
+      console.log('Successfully generated preview image!');
     } else {
       console.error('Table element not found.');
     }
