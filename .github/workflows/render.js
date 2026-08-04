@@ -4,38 +4,41 @@ const path = require('path');
 (async () => {
   let browser;
   try {
-    // 1. Launch headless browser
     browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] // Required for GitHub Actions runner environment
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const page = await browser.newPage();
 
-    // 2. Load your HTML content/file
-    // Replace 'index.html' with your actual HTML file name if it's different
-    const filePath = path.join(__dirname, 'index.html'); 
+    // 1. Force standard 1:1 screen resolution so previewers scale it properly
+    await page.setViewport({
+      width: 800,
+      height: 600,
+      deviceScaleFactor: 1 // Crucial for clean chat/email preview scaling
+    });
+
+    // 2. Load your file
+    const filePath = path.join(__dirname, 'render.html'); // Adjust file name if needed
     await page.goto(`file://${filePath}`, { waitUntil: 'networkidle0' });
 
-    // 3. Wait for the table to appear on screen
+    // 3. Wait for the table
     await page.waitForSelector('table');
-
-    // 4. Select the table element
     const tableElement = await page.$('table');
 
     if (tableElement) {
-      // 5. Take a tight screenshot of ONLY the table (removes all black side bars)
+      // 4. Take a clean, cropped screenshot of ONLY the table
       await tableElement.screenshot({
         path: 'output.png',
-        omitBackground: true // Transparent background around rounded corners, if any
+        omitBackground: true
       });
-      console.log('Successfully generated output.png without black margins!');
+      console.log('Image successfully rendered for chat preview!');
     } else {
-      console.error('Error: Table element could not be found on the page.');
+      console.error('Table element not found.');
     }
 
   } catch (error) {
-    console.error('Error while rendering image:', error);
+    console.error('Error rendering image:', error);
     process.exit(1);
   } finally {
     if (browser) {
