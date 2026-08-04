@@ -1,26 +1,45 @@
 const puppeteer = require('puppeteer');
-const sharp = require('sharp'); // 1. Import sharp
+const path = require('path');
 
 (async () => {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  
-  // Set your URL or page content
-  await page.setContent('<h1>Your Table/Content Here</h1>'); 
+  let browser;
+  try {
+    // 1. Launch headless browser
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'] // Required for GitHub Actions runner environment
+    });
 
-  // 2. Save an initial temporary screenshot
-  const rawImagePath = 'temp_render.png';
-  await page.screenshot({ path: rawImagePath });
-  await browser.close();
+    const page = await browser.newPage();
 
-  // 3. Resize the image with Sharp
-  await sharp(rawImagePath)
-    .resize({
-      width: 800,           // Desired width in pixels
-      // height: 600,       // Optional: Leave empty to maintain aspect ratio
-      fit: 'inside'         // Keeps the entire image visible without stretching
-    })
-    .toFile('final_table.png'); // Final output path
+    // 2. Load your HTML content/file
+    // Replace 'index.html' with your actual HTML file name if it's different
+    const filePath = path.join(__dirname, 'index.html'); 
+    await page.goto(`file://${filePath}`, { waitUntil: 'networkidle0' });
 
-  console.log('Image successfully resized and saved!');
+    // 3. Wait for the table to appear on screen
+    await page.waitForSelector('table');
+
+    // 4. Select the table element
+    const tableElement = await page.$('table');
+
+    if (tableElement) {
+      // 5. Take a tight screenshot of ONLY the table (removes all black side bars)
+      await tableElement.screenshot({
+        path: 'output.png',
+        omitBackground: true // Transparent background around rounded corners, if any
+      });
+      console.log('Successfully generated output.png without black margins!');
+    } else {
+      console.error('Error: Table element could not be found on the page.');
+    }
+
+  } catch (error) {
+    console.error('Error while rendering image:', error);
+    process.exit(1);
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
 })();
