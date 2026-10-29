@@ -75,7 +75,7 @@ jobs:
               process.exit(1);
             }
 
-            console.log("Sending base64 image data to Google Apps Script Web App...");
+            console.log("Sending base64 image data to Google Apps Script Web App: " + callbackUrl);
             const response = await axios.post(callbackUrl, {
               image_base64: imageBase64,
               webhook_url: webhookUrl,
