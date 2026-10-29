@@ -1,90 +1,117 @@
-name: Render Sheet Table Image
+name: Render Table and Send to Google Chat
 
 on:
   repository_dispatch:
     types: [render_table]
 
 jobs:
-  render:
+  render_and_send:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install Puppeteer
-        run: npm install puppeteer
-
-      - name: Decode HTML & Take Screenshot
+      - name: Install Puppeteer and Dependencies
         run: |
-          echo "${{ github.event.client_payload.html_base64 }}" | base64 -d > table.html
-          node -e "
-            const puppeteer = require('puppeteer');
-            const fs = require('fs');
-            (async () => {
-              const htmlContent = fs.readFileSync('table.html', 'utf8');
-              const browser = await puppeteer.launch({
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-              });
-              const page = await browser.newPage();
-              await page.setViewport({ width: 1400, height: 900, deviceScaleFactor: 2 });
-              await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-              const element = await page.\$('table');
-              await element.screenshot({ path: 'output.png' });
-              await browser.close();
-            })();
-          "
+          npm install puppeteer axios form-data
 
-      - name: Publish Image to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
-          destination_dir: .
-          publish_branch: gh-pages
-          keep_files: false
-
-      - name: Post Image Card to Google Chat
+      - name: Decode Base64 HTML to File
         run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
-          
-          # GitHub Pages hosted web URL
-          IMAGE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/output.png?v=$(date +%s)"
-          
-          cat <<EOF > payload.json
-          {
-            "cardsV2": [
-              {
-                "cardId": "cashFlowTableCard",
-                "card": {
-                  "sections": [
-                    {
-                      "widgets": [
-                        {
-                          "image": {
-                            "imageUrl": "${IMAGE_URL}",
-                            "altText": "Cash Flow Table Image",
-                            "onClick": {
-                              "openLink": {
-                                "url": "${IMAGE_URL}"
-                              }
+          mkdir -p images
+          echo "${{ github.event.client_payload.html_base64 }}" | base64 --decode > input.html
+
+      - name: Render HTML Table to Image
+        run: |
+          cat << 'EOF' > render.js
+          const puppeteer = require('puppeteer');
+          const path = require('path');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            const filePath = `file://${path.resolve('input.html')}`;
+            await page.goto(filePath, { waitUntil: 'networkidle0' });
+
+            const table = await page.$('table');
+            const fileName = "${{ github.event.client_payload.filename }}";
+            const outputPath = path.join('images', fileName);
+
+            if (table) {
+              await table.screenshot({ path: outputPath });
+            } else {
+              await page.screenshot({ path: outputPath, fullPage: true });
+            }
+
+            await browser.close();
+            console.log("Image saved to " + outputPath);
+          })();
+          EOF
+          node render.js
+
+      - name: Commit Image to Archive (Preserves Past Images)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add images/
+          git commit -m "Archive report: ${{ github.event.client_payload.filename }}" || echo "No changes to commit"
+          git push
+
+      - name: Post Image URL to Google Chat
+        run: |
+          cat << 'EOF' > send_chat.js
+          const axios = require('axios');
+
+          (async () => {
+            const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
+            const repo = process.env.GITHUB_REPOSITORY;
+            const branch = "main"; // Change to "master" if your default branch is master
+            const fileName = "${{ github.event.client_payload.filename }}";
+            const rawImageUrl = `https://raw.githubusercontent.com/${repo}/${branch}/images/${fileName}`;
+
+            const payload = {
+              cardsV2: [
+                {
+                  cardId: "reportCard",
+                  card: {
+                    header: {
+                      title: "Daily Report Table",
+                      subtitle: "${{ github.event.client_payload.timestamp }}"
+                    },
+                    sections: [
+                      {
+                        widgets: [
+                          {
+                            image: {
+                              imageUrl: rawImageUrl,
+                              altText: "Daily Report Table"
                             }
                           }
-                        }
-                      ]
-                    }
-                  ]
+                        ]
+                      }
+                    ]
+                  }
                 }
-              }
-            ]
-          }
-          EOF
+              ]
+            };
 
-          curl -X POST -H "Content-Type: application/json; charset=UTF-8" --data-binary @payload.json "${{ github.event.client_payload.webhook_url }}"
+            try {
+              const res = await axios.post(webhookUrl, payload);
+              console.log("Message sent to Google Chat: " + res.status);
+            } catch (err) {
+              console.error("Error sending to Google Chat:", err.response ? err.response.data : err.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          node send_chat.js
