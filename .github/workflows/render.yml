@@ -78,12 +78,10 @@ jobs:
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
             const fileName = "${{ github.event.client_payload.filename }}";
-            const timestamp = "${{ github.event.client_payload.timestamp }}";
             const imagePath = path.join('images', fileName);
 
             let imageUrl = "";
 
-            // Upload to litterbox (Catbox temporary file host, lasts 3 days - perfect for daily reports)
             try {
               const form = new FormData();
               form.append('reqtype', 'fileupload');
@@ -107,16 +105,12 @@ jobs:
               imageUrl = res2.data.trim();
             }
 
-            // Post Card with interactive click and full-size open link
+            // Card payload without header
             const payload = {
               cardsV2: [
                 {
                   cardId: "dailyReportCard",
                   card: {
-                    header: {
-                      title: "Daily Report Table",
-                      subtitle: timestamp
-                    },
                     sections: [
                       {
                         widgets: [
