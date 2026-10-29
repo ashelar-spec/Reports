@@ -20,9 +20,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Puppeteer and Axios
+      - name: Install Dependencies
         run: |
-          npm install puppeteer axios
+          npm install puppeteer axios form-data
 
       - name: Decode Base64 HTML to File
         run: |
@@ -54,7 +54,7 @@ jobs:
             }
 
             await browser.close();
-            console.log("Image saved to " + outputPath);
+            console.log("Image saved to: " + outputPath);
           })();
           EOF
           node render.js
@@ -67,12 +67,60 @@ jobs:
           git commit -m "Archive report: ${{ github.event.client_payload.filename }}" || echo "No changes to commit"
           git push
 
-      - name: Post Clickable Image to Google Chat
+      - name: Post Image directly to Google Chat
         run: |
           cat << 'EOF' > send_chat.js
           const axios = require('axios');
+          const fs = require('fs');
+          const path = require('path');
+          const FormData = require('form-data');
 
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
-            const repo = process.env.GITHUB_REPOSITORY;
-            const
+            const fileName = "${{ github.event.client_payload.filename }}";
+            const imagePath = path.join('images', fileName);
+
+            // Extract space name and query params from webhookUrl
+            // Format: https://chat.googleapis.com/v1/spaces/<SPACE_ID>/messages?key=...&token=...
+            const urlObj = new URL(webhookUrl);
+            const spaceMatch = urlObj.pathname.match(/\/spaces\/([^/]+)/);
+
+            if (!spaceMatch) {
+              console.error("Invalid webhook URL format");
+              process.exit(1);
+            }
+
+            const spaceId = spaceMatch[1];
+            const uploadUrl = `https://chat.googleapis.com/upload/v1/spaces/${spaceId}/attachments:upload?${urlObj.searchParams.toString()}`;
+
+            try {
+              // 1. Upload the image file as an attachment
+              const form = new FormData();
+              form.append('file', fs.createReadStream(imagePath));
+
+              const uploadRes = await axios.post(uploadUrl, form, {
+                headers: form.getHeaders()
+              });
+
+              const attachmentDataRef = uploadRes.data.attachmentDataRef;
+
+              // 2. Post the message with the uploaded attachment
+              const messagePayload = {
+                text: `*Daily Report Table* (${ "${{ github.event.client_payload.timestamp }}" })`,
+                attachment: [
+                  {
+                    attachmentDataRef: attachmentDataRef
+                  }
+                ]
+              };
+
+              const postRes = await axios.post(webhookUrl, messagePayload);
+              console.log("Image successfully posted to Google Chat! Status:", postRes.status);
+
+            } catch (err) {
+              console.error("Failed to upload/post to Google Chat:", err.response ? err.response.data : err.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          node send_chat.js
