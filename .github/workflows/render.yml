@@ -8,9 +8,6 @@ jobs:
   render_and_send:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,7 +23,6 @@ jobs:
 
       - name: Decode Base64 HTML to File
         run: |
-          mkdir -p images
           echo "${{ github.event.client_payload.html_base64 }}" | base64 --decode > input.html
 
       - name: Render HTML Table to Image
@@ -44,8 +40,7 @@ jobs:
             await page.goto(filePath, { waitUntil: 'networkidle0' });
 
             const table = await page.$('table');
-            const fileName = "${{ github.event.client_payload.filename }}";
-            const outputPath = path.join('images', fileName);
+            const outputPath = path.resolve('output.png');
 
             if (table) {
               await table.screenshot({ path: outputPath });
@@ -54,18 +49,10 @@ jobs:
             }
 
             await browser.close();
-            console.log("Image saved to: " + outputPath);
+            console.log("Image saved temporarily to: " + outputPath);
           })();
           EOF
           node render.js
-
-      - name: Commit Image to Archive
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add images/
-          git commit -m "Archive report: ${{ github.event.client_payload.filename }}" || echo "No changes to commit"
-          git push
 
       - name: Upload to Temporary CDN and Post Clickable Card
         run: |
@@ -77,8 +64,7 @@ jobs:
 
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
-            const fileName = "${{ github.event.client_payload.filename }}";
-            const imagePath = path.join('images', fileName);
+            const imagePath = path.resolve('output.png');
 
             let imageUrl = "";
 
@@ -105,7 +91,6 @@ jobs:
               imageUrl = res2.data.trim();
             }
 
-            // Card payload without header
             const payload = {
               cardsV2: [
                 {
