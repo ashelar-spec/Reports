@@ -20,9 +20,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Puppeteer and Dependencies
+      - name: Install Puppeteer and Axios
         run: |
-          npm install puppeteer axios form-data
+          npm install puppeteer axios
 
       - name: Decode Base64 HTML to File
         run: |
@@ -59,7 +59,7 @@ jobs:
           EOF
           node render.js
 
-      - name: Commit Image to Archive (Preserves Past Images)
+      - name: Commit Image to Archive
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -67,7 +67,7 @@ jobs:
           git commit -m "Archive report: ${{ github.event.client_payload.filename }}" || echo "No changes to commit"
           git push
 
-      - name: Post Image URL to Google Chat
+      - name: Post Clickable Image to Google Chat
         run: |
           cat << 'EOF' > send_chat.js
           const axios = require('axios');
@@ -75,43 +75,4 @@ jobs:
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
             const repo = process.env.GITHUB_REPOSITORY;
-            const branch = "main"; // Change to "master" if your default branch is master
-            const fileName = "${{ github.event.client_payload.filename }}";
-            const rawImageUrl = `https://raw.githubusercontent.com/${repo}/${branch}/images/${fileName}`;
-
-            const payload = {
-              cardsV2: [
-                {
-                  cardId: "reportCard",
-                  card: {
-                    header: {
-                      title: "Daily Report Table",
-                      subtitle: "${{ github.event.client_payload.timestamp }}"
-                    },
-                    sections: [
-                      {
-                        widgets: [
-                          {
-                            image: {
-                              imageUrl: rawImageUrl,
-                              altText: "Daily Report Table"
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                }
-              ]
-            };
-
-            try {
-              const res = await axios.post(webhookUrl, payload);
-              console.log("Message sent to Google Chat: " + res.status);
-            } catch (err) {
-              console.error("Error sending to Google Chat:", err.response ? err.response.data : err.message);
-              process.exit(1);
-            }
-          })();
-          EOF
-          node send_chat.js
+            const
