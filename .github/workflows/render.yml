@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
+      - name: Install Puppeteer and Axios
         run: |
           npm install puppeteer axios form-data
 
@@ -67,7 +67,7 @@ jobs:
           git commit -m "Archive report: ${{ github.event.client_payload.filename }}" || echo "No changes to commit"
           git push
 
-      - name: Post Image directly to Google Chat
+      - name: Upload to Temporary CDN and Post Clickable Card
         run: |
           cat << 'EOF' > send_chat.js
           const axios = require('axios');
@@ -78,49 +78,83 @@ jobs:
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
             const fileName = "${{ github.event.client_payload.filename }}";
+            const timestamp = "${{ github.event.client_payload.timestamp }}";
             const imagePath = path.join('images', fileName);
 
-            // Extract space name and query params from webhookUrl
-            // Format: https://chat.googleapis.com/v1/spaces/<SPACE_ID>/messages?key=...&token=...
-            const urlObj = new URL(webhookUrl);
-            const spaceMatch = urlObj.pathname.match(/\/spaces\/([^/]+)/);
+            let imageUrl = "";
 
-            if (!spaceMatch) {
-              console.error("Invalid webhook URL format");
-              process.exit(1);
-            }
-
-            const spaceId = spaceMatch[1];
-            const uploadUrl = `https://chat.googleapis.com/upload/v1/spaces/${spaceId}/attachments:upload?${urlObj.searchParams.toString()}`;
-
+            // Upload to litterbox (Catbox temporary file host, lasts 3 days - perfect for daily reports)
             try {
-              // 1. Upload the image file as an attachment
               const form = new FormData();
-              form.append('file', fs.createReadStream(imagePath));
+              form.append('reqtype', 'fileupload');
+              form.append('time', '72h');
+              form.append('fileToUpload', fs.createReadStream(imagePath));
 
-              const uploadRes = await axios.post(uploadUrl, form, {
-                headers: form.getHeaders()
+              const uploadRes = await axios.post('https://litterbox.catbox.moe/resources/internals/api.php', form, {
+                headers: form.getHeaders(),
+                timeout: 30000
               });
 
-              const attachmentDataRef = uploadRes.data.attachmentDataRef;
-
-              // 2. Post the message with the uploaded attachment
-              const messagePayload = {
-                text: `*Daily Report Table* (${ "${{ github.event.client_payload.timestamp }}" })`,
-                attachment: [
-                  {
-                    attachmentDataRef: attachmentDataRef
-                  }
-                ]
-              };
-
-              const postRes = await axios.post(webhookUrl, messagePayload);
-              console.log("Image successfully posted to Google Chat! Status:", postRes.status);
-
+              imageUrl = uploadRes.data.trim();
+              console.log("Uploaded successfully to CDN:", imageUrl);
             } catch (err) {
-              console.error("Failed to upload/post to Google Chat:", err.response ? err.response.data : err.message);
-              process.exit(1);
+              console.error("Primary CDN upload failed, falling back to 0x0.st:", err.message);
+              const form2 = new FormData();
+              form2.append('file', fs.createReadStream(imagePath));
+              const res2 = await axios.post('https://0x0.st', form2, {
+                headers: form2.getHeaders()
+              });
+              imageUrl = res2.data.trim();
             }
+
+            // Post Card with interactive click and full-size open link
+            const payload = {
+              cardsV2: [
+                {
+                  cardId: "dailyReportCard",
+                  card: {
+                    header: {
+                      title: "Daily Report Table",
+                      subtitle: timestamp
+                    },
+                    sections: [
+                      {
+                        widgets: [
+                          {
+                            image: {
+                              imageUrl: imageUrl,
+                              altText: "Daily Report Table",
+                              onClick: {
+                                openLink: {
+                                  url: imageUrl
+                                }
+                              }
+                            }
+                          },
+                          {
+                            buttonList: {
+                              buttons: [
+                                {
+                                  text: "🔍 Click to Open Full Image",
+                                  onClick: {
+                                    openLink: {
+                                      url: imageUrl
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            };
+
+            const chatRes = await axios.post(webhookUrl, payload);
+            console.log("Posted to Google Chat with status:", chatRes.status);
           })();
           EOF
           node send_chat.js
