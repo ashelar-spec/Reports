@@ -1,0 +1,139 @@
+name: Render Table and Send to Google Chat
+
+on:
+  repository_dispatch:
+    types: [render_table]
+
+jobs:
+  render_and_send:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Puppeteer and Axios
+        run: |
+          npm install puppeteer axios form-data
+
+      - name: Decode Base64 HTML to File
+        run: |
+          echo "${{ github.event.client_payload.html_base64 }}" | base64 --decode > input.html
+
+      - name: Render HTML Table to Image
+        run: |
+          cat << 'EOF' > render.js
+          const puppeteer = require('puppeteer');
+          const path = require('path');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            const filePath = `file://${path.resolve('input.html')}`;
+            await page.goto(filePath, { waitUntil: 'networkidle0' });
+
+            const table = await page.$('table');
+            const outputPath = path.resolve('temp_report.png');
+
+            if (table) {
+              await table.screenshot({ path: outputPath });
+            } else {
+              await page.screenshot({ path: outputPath, fullPage: true });
+            }
+
+            await browser.close();
+            console.log("Image saved to memory/runner: " + outputPath);
+          })();
+          EOF
+          node render.js
+
+      - name: Upload to Temporary CDN and Post Clickable Card
+        run: |
+          cat << 'EOF' > send_chat.js
+          const axios = require('axios');
+          const fs = require('fs');
+          const path = require('path');
+          const FormData = require('form-data');
+
+          (async () => {
+            const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
+            const imagePath = path.resolve('temp_report.png');
+
+            let imageUrl = "";
+
+            try {
+              const form = new FormData();
+              form.append('reqtype', 'fileupload');
+              form.append('time', '72h');
+              form.append('fileToUpload', fs.createReadStream(imagePath));
+
+              const uploadRes = await axios.post('https://litterbox.catbox.moe/resources/internals/api.php', form, {
+                headers: form.getHeaders(),
+                timeout: 30000
+              });
+
+              imageUrl = uploadRes.data.trim();
+              console.log("Uploaded successfully to CDN:", imageUrl);
+            } catch (err) {
+              console.error("Primary CDN upload failed, falling back to 0x0.st:", err.message);
+              const form2 = new FormData();
+              form2.append('file', fs.createReadStream(imagePath));
+              const res2 = await axios.post('https://0x0.st', form2, {
+                headers: form2.getHeaders()
+              });
+              imageUrl = res2.data.trim();
+            }
+
+            const payload = {
+              cardsV2: [
+                {
+                  cardId: "dailyReportCard",
+                  card: {
+                    sections: [
+                      {
+                        widgets: [
+                          {
+                            image: {
+                              imageUrl: imageUrl,
+                              altText: "Daily Report Table",
+                              onClick: {
+                                openLink: {
+                                  url: imageUrl
+                                }
+                              }
+                            }
+                          },
+                          {
+                            buttonList: {
+                              buttons: [
+                                {
+                                  text: "🔍 Click to Open Full Image",
+                                  onClick: {
+                                    openLink: {
+                                      url: imageUrl
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            };
+
+            const chatRes = await axios.post(webhookUrl, payload);
+            console.log("Posted to Google Chat with status:", chatRes.status);
+          })();
+          EOF
+          node send_chat.js
