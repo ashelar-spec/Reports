@@ -17,9 +17,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Puppeteer and Axios
+      - name: Install Puppeteer
         run: |
-          npm install puppeteer axios
+          npm install puppeteer
 
       - name: Decode Base64 HTML to File
         run: |
@@ -56,37 +56,46 @@ jobs:
 
       - name: Send Base64 Image to Apps Script / Google Drive
         run: |
-          cat << 'EOF' > callback.js
-          const axios = require('axios');
+          cat << 'EOF' > send_to_drive.js
           const fs = require('fs');
+          const { execSync } = require('child_process');
           const path = require('path');
 
-          (async () => {
-            const callbackUrl = "${{ github.event.client_payload.callback_url }}";
-            const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
-            const timestamp = "${{ github.event.client_payload.timestamp }}";
-            const imagePath = path.resolve('output.png');
+          const callbackUrl = "${{ github.event.client_payload.callback_url }}";
+          const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
+          const timestamp = "${{ github.event.client_payload.timestamp }}";
+          const imagePath = path.resolve('output.png');
 
-            const imageBuffer = fs.readFileSync(imagePath);
-            const imageBase64 = imageBuffer.toString('base64');
+          if (!callbackUrl || !callbackUrl.includes("/exec")) {
+            console.error("ERROR: No valid Apps Script Web App URL received (must end in /exec). Received: " + callbackUrl);
+            process.exit(1);
+          }
 
-            if (!callbackUrl || callbackUrl === "YOUR_DEPLOYED_WEB_APP_URL_HERE") {
-              console.error("ERROR: No valid callback_url received from Google Apps Script.");
+          console.log("Encoding rendered image...");
+          const imageBase64 = fs.readFileSync(imagePath).toString('base64');
+          const payload = JSON.stringify({
+            image_base64: imageBase64,
+            webhook_url: webhookUrl,
+            timestamp: timestamp
+          });
+
+          fs.writeFileSync('payload.json', payload);
+
+          console.log("Posting payload to Apps Script endpoint: " + callbackUrl);
+          try {
+            // Using curl with -L ensures Google's 302 redirects are followed automatically
+            const rawOutput = execSync(`curl -sS -L -X POST -H "Content-Type: application/json" -d @payload.json "${callbackUrl}"`, { maxBuffer: 50 * 1024 * 1024 }).toString();
+            console.log("--- APPS SCRIPT RESPONSE ---");
+            console.log(rawOutput);
+            console.log("----------------------------");
+
+            if (rawOutput.includes('"status":"error"') || rawOutput.includes('Google Accounts')) {
+              console.error("Apps Script rejected or failed the request.");
               process.exit(1);
             }
-
-            console.log("Sending base64 image data to Google Apps Script Web App: " + callbackUrl);
-            const response = await axios.post(callbackUrl, {
-              image_base64: imageBase64,
-              webhook_url: webhookUrl,
-              timestamp: timestamp
-            }, {
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-              maxRedirects: 5
-            });
-
-            console.log("Apps Script Response:", response.data);
-          })();
+          } catch (err) {
+            console.error("Execution error:", err.message);
+            process.exit(1);
+          }
           EOF
-          node callback.js
+          node send_to_drive.js
