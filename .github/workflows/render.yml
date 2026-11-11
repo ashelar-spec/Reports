@@ -19,7 +19,7 @@ jobs:
 
       - name: Install Puppeteer and Axios
         run: |
-          npm install puppeteer axios form-data
+          npm install puppeteer axios
 
       - name: Decode Base64 HTML to File
         run: |
@@ -49,60 +49,53 @@ jobs:
             }
 
             await browser.close();
-            console.log("Image saved temporarily to: " + outputPath);
+            console.log("Image rendered successfully to output.png");
           })();
           EOF
           node render.js
 
-      - name: Upload to Temporary CDN and Post Clickable Card
+      - name: Upload Image and Post Directly to Google Chat
         run: |
-          cat << 'EOF' > send_chat.js
+          cat << 'EOF' > post_chat.js
           const axios = require('axios');
-          const fs = require('fs');
+          const { execSync } = require('child_process');
           const path = require('path');
-          const FormData = require('form-data');
 
           (async () => {
             const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
+            const timestamp = "${{ github.event.client_payload.timestamp }}";
             const imagePath = path.resolve('output.png');
 
+            console.log("Uploading rendered image to public CDN...");
+            // Upload to 0x0.st (fast, permanent-link hosting for raw image rendering in Chat)
             let imageUrl = "";
-
             try {
-              const form = new FormData();
-              form.append('reqtype', 'fileupload');
-              form.append('time', '72h');
-              form.append('fileToUpload', fs.createReadStream(imagePath));
-
-              const uploadRes = await axios.post('https://litterbox.catbox.moe/resources/internals/api.php', form, {
-                headers: form.getHeaders(),
-                timeout: 30000
-              });
-
-              imageUrl = uploadRes.data.trim();
-              console.log("Uploaded successfully to CDN:", imageUrl);
-            } catch (err) {
-              console.error("Primary CDN upload failed, falling back to 0x0.st:", err.message);
-              const form2 = new FormData();
-              form2.append('file', fs.createReadStream(imagePath));
-              const res2 = await axios.post('https://0x0.st', form2, {
-                headers: form2.getHeaders()
-              });
-              imageUrl = res2.data.trim();
+              imageUrl = execSync(`curl -s -F "file=@${imagePath}" https://0x0.st`).toString().trim();
+            } catch (e) {
+              console.log("Fallback to tmpfiles CDN...");
+              const res = execSync(`curl -s -F "file=@${imagePath}" https://tmpfiles.org/api/v1/upload`).toString();
+              const json = JSON.parse(res);
+              imageUrl = json.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
             }
 
-            const payload = {
+            console.log("Image URL obtained:", imageUrl);
+
+            const cardPayload = {
               cardsV2: [
                 {
-                  cardId: "dailyReportCard",
+                  cardId: "dailyFundReportCard",
                   card: {
+                    header: {
+                      title: "📊 Daily Store Fund Report",
+                      subtitle: timestamp
+                    },
                     sections: [
                       {
                         widgets: [
                           {
                             image: {
                               imageUrl: imageUrl,
-                              altText: "Daily Report Table",
+                              altText: "Daily Store Fund Table Snapshot",
                               onClick: {
                                 openLink: {
                                   url: imageUrl
@@ -114,7 +107,7 @@ jobs:
                             buttonList: {
                               buttons: [
                                 {
-                                  text: "🔍 Click to Open Full Image",
+                                  text: "🔍 View Full Image",
                                   onClick: {
                                     openLink: {
                                       url: imageUrl
@@ -132,8 +125,9 @@ jobs:
               ]
             };
 
-            const chatRes = await axios.post(webhookUrl, payload);
-            console.log("Posted to Google Chat with status:", chatRes.status);
+            console.log("Posting card to Google Chat...");
+            const response = await axios.post(webhookUrl, cardPayload);
+            console.log("Google Chat Response Status:", response.status);
           })();
           EOF
-          node send_chat.js
+          node post_chat.js
