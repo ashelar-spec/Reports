@@ -49,14 +49,14 @@ jobs:
             }
 
             await browser.close();
-            console.log("Image rendered successfully to output.png");
+            console.log("Image successfully rendered to output.png");
           })();
           EOF
           node render.js
 
-      - name: Upload Image and Post Directly to Google Chat
+      - name: Upload and Send Direct Image to Chat
         run: |
-          cat << 'EOF' > post_chat.js
+          cat << 'EOF' > send.js
           const axios = require('axios');
           const { execSync } = require('child_process');
           const path = require('path');
@@ -66,68 +66,76 @@ jobs:
             const timestamp = "${{ github.event.client_payload.timestamp }}";
             const imagePath = path.resolve('output.png');
 
-            console.log("Uploading rendered image to public CDN...");
-            // Upload to 0x0.st (fast, permanent-link hosting for raw image rendering in Chat)
-            let imageUrl = "";
+            console.log("Uploading rendered image...");
+            let directImageUrl = "";
+
             try {
-              imageUrl = execSync(`curl -s -F "file=@${imagePath}" https://0x0.st`).toString().trim();
-            } catch (e) {
-              console.log("Fallback to tmpfiles CDN...");
-              const res = execSync(`curl -s -F "file=@${imagePath}" https://tmpfiles.org/api/v1/upload`).toString();
-              const json = JSON.parse(res);
-              imageUrl = json.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+              // Upload to catbox.moe for a direct .png image URL
+              const res = execSync(`curl -s -F "reqtype=fileupload" -F "fileToUpload=@${imagePath}" https://catbox.moe/user/api.php`).toString().trim();
+              if (res.startsWith("http")) {
+                directImageUrl = res;
+              }
+            } catch (err) {
+              console.log("Catbox upload failed, attempting fallback...");
             }
 
-            console.log("Image URL obtained:", imageUrl);
+            if (!directImageUrl) {
+              try {
+                // Secondary direct fallback
+                const res = execSync(`curl -s -F "file=@${imagePath}" https://0x0.st`).toString().trim();
+                directImageUrl = res;
+              } catch (err) {
+                console.error("All upload channels failed.");
+                process.exit(1);
+              }
+            }
 
-            const cardPayload = {
-              cardsV2: [
+            console.log("Image URL obtained: " + directImageUrl);
+
+            // Using standard cards schema to guarantee inline thumbnail rendering
+            const chatPayload = {
+              cards: [
                 {
-                  cardId: "dailyFundReportCard",
-                  card: {
-                    header: {
-                      title: "📊 Daily Store Fund Report",
-                      subtitle: timestamp
-                    },
-                    sections: [
-                      {
-                        widgets: [
-                          {
-                            image: {
-                              imageUrl: imageUrl,
-                              altText: "Daily Store Fund Table Snapshot",
-                              onClick: {
-                                openLink: {
-                                  url: imageUrl
+                  header: {
+                    title: "📊 Daily Store Fund Report",
+                    subtitle: timestamp
+                  },
+                  sections: [
+                    {
+                      widgets: [
+                        {
+                          image: {
+                            imageUrl: directImageUrl,
+                            onClick: {
+                              openLink: {
+                                url: directImageUrl
+                              }
+                            }
+                          }
+                        },
+                        {
+                          buttons: [
+                            {
+                              textButton: {
+                                text: "🔍 OPEN FULL SCREENSHOT",
+                                onClick: {
+                                  openLink: {
+                                    url: directImageUrl
+                                  }
                                 }
                               }
                             }
-                          },
-                          {
-                            buttonList: {
-                              buttons: [
-                                {
-                                  text: "🔍 View Full Image",
-                                  onClick: {
-                                    openLink: {
-                                      url: imageUrl
-                                    }
-                                  }
-                                }
-                              ]
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             };
 
-            console.log("Posting card to Google Chat...");
-            const response = await axios.post(webhookUrl, cardPayload);
-            console.log("Google Chat Response Status:", response.status);
+            const response = await axios.post(webhookUrl, chatPayload);
+            console.log("Google Chat Post Response:", response.status);
           })();
           EOF
-          node post_chat.js
+          node send.js
