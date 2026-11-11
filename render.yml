@@ -1,0 +1,160 @@
+name: Render Table and Send to Google Chat
+
+on:
+  repository_dispatch:
+    types: [render_table]
+
+jobs:
+  render_and_send:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Puppeteer and Axios
+        run: |
+          npm install puppeteer axios form-data
+
+      - name: Decode Base64 HTML to File
+        run: |
+          echo "${{ github.event.client_payload.html_base64 }}" | base64 --decode > input.html
+
+      - name: Render HTML Table to Image
+        run: |
+          cat << 'EOF' > render.js
+          const puppeteer = require('puppeteer');
+          const path = require('path');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            const filePath = `file://${path.resolve('input.html')}`;
+            await page.goto(filePath, { waitUntil: 'networkidle0' });
+
+            const table = await page.$('table');
+            const outputPath = path.resolve('output.png');
+
+            if (table) {
+              await table.screenshot({ path: outputPath });
+            } else {
+              await page.screenshot({ path: outputPath, fullPage: true });
+            }
+
+            await browser.close();
+            console.log("Image rendered successfully to output.png");
+          })();
+          EOF
+          node render.js
+
+      - name: Upload and Send Direct Image to Chat
+        run: |
+          cat << 'EOF' > send.js
+          const axios = require('axios');
+          const fs = require('fs');
+          const path = require('path');
+          const { execSync } = require('child_process');
+
+          (async () => {
+            const webhookUrl = "${{ github.event.client_payload.webhook_url }}";
+            const timestamp = "${{ github.event.client_payload.timestamp }}";
+            const imagePath = path.resolve('output.png');
+
+            console.log("Uploading output.png to image host...");
+            let directImageUrl = "";
+
+            // Primary: tmpfiles.org API (reliable and does not block GitHub runners)
+            try {
+              const res = execSync(`curl -s -F "file=@${imagePath}" https://tmpfiles.org/api/v1/upload`).toString();
+              console.log("tmpfiles raw response:", res);
+              const data = JSON.parse(res);
+              if (data && data.data && data.data.url) {
+                // Convert tmpfiles view link to direct raw image link by adding /dl/
+                directImageUrl = data.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+              }
+            } catch (err) {
+              console.log("tmpfiles upload failed:", err.message);
+            }
+
+            // Fallback: filebin.net
+            if (!directImageUrl) {
+              try {
+                const binId = "cex-fund-" + Date.now();
+                const res = execSync(`curl -s -X POST --data-binary "@${imagePath}" -H "filename: table.png" -H "Content-Type: image/png" "https://filebin.net/${binId}/table.png"`).toString();
+                console.log("filebin raw response:", res);
+                directImageUrl = `https://filebin.net/${binId}/table.png`;
+              } catch (err) {
+                console.log("filebin fallback failed:", err.message);
+              }
+            }
+
+            console.log("Final Direct Image URL:", directImageUrl);
+
+            if (!directImageUrl) {
+              console.error("ERROR: Failed to obtain direct image URL.");
+              process.exit(1);
+            }
+
+            // Deliver interactive card to Google Chat
+            const cardPayload = {
+              cardsV2: [
+                {
+                  cardId: "fundReportCard",
+                  card: {
+                    header: {
+                      title: "📊 Daily Store Fund Report",
+                      subtitle: timestamp
+                    },
+                    sections: [
+                      {
+                        widgets: [
+                          {
+                            image: {
+                              imageUrl: directImageUrl,
+                              altText: "Daily Store Fund Table Snapshot",
+                              onClick: {
+                                openLink: {
+                                  url: directImageUrl
+                                }
+                              }
+                            }
+                          },
+                          {
+                            buttonList: {
+                              buttons: [
+                                {
+                                  text: "🔍 Open Full Screenshot",
+                                  onClick: {
+                                    openLink: {
+                                      url: directImageUrl
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            };
+
+            try {
+              const chatRes = await axios.post(webhookUrl, cardPayload);
+              console.log("Google Chat Post Success:", chatRes.status);
+            } catch (chatErr) {
+              console.error("Google Chat Webhook Error:", chatErr.response ? chatErr.response.data : chatErr.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+          node send.js
