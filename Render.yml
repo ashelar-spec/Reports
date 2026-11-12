@@ -1,0 +1,40 @@
+name: Render Table and Send to Google Chat
+
+on:
+  repository_dispatch:
+    types: [render_table]
+
+permissions:
+  contents: write
+
+jobs:
+  render-and-send:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Render HTML to PNG
+        env:
+          HTML_BASE64: ${{ github.event.client_payload.html_base64 }}
+          FILENAME: ${{ github.event.client_payload.filename }}
+        run: |
+          mkdir -p images
+          node -e '
+            const fs = require("fs");
+            const puppeteer = require("puppeteer");
+
+            (async () => {
+              const html = Buffer.from(process.env.HTML_BASE64, "base64").toString("utf8");
+              const browser = await puppeteer.launch({ args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+              const page = await browser.newPage();
+              await page.setContent(html, { waitUntil: "networkidle0" });
