@@ -116,9 +116,6 @@ jobs:
                   cardId: "dailyReportCard",
                   card: {
                     header: {
-                      title: "Daily Report Table",
-                      subtitle: timestamp
-                    },
                     sections: [
                       {
                         widgets: [
@@ -133,14 +130,9 @@ jobs:
                               }
                             }
                           },
-                          {
                             buttonList: {
                               buttons: [
                                 {
-                                  text: "🔎 Open Full Size",
-                                  onClick: {
-                                    openLink: {
-                                      url: publicImageUrl
                                     }
                                   }
                                 }
