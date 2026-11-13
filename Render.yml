@@ -38,3 +38,50 @@ jobs:
               const browser = await puppeteer.launch({ args: ["--no-sandbox", "--disable-setuid-sandbox"] });
               const page = await browser.newPage();
               await page.setContent(html, { waitUntil: "networkidle0" });
+              const table = await page.$("table");
+              await table.screenshot({ path: "images/" + process.env.FILENAME });
+              await browser.close();
+            })();
+          '
+
+      - name: Commit and Push Image
+        env:
+          FILENAME: ${{ github.event.client_payload.filename }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add images/$FILENAME
+          git commit -m "Add report image $FILENAME"
+          git push
+
+      - name: Send Image Only to Google Chat
+        env:
+          WEBHOOK_URL: ${{ github.event.client_payload.webhook_url }}
+          FILENAME: ${{ github.event.client_payload.filename }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          IMAGE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/images/${FILENAME}"
+
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"cardsV2\": [
+                {
+                  \"cardId\": \"image-only\",
+                  \"card\": {
+                    \"sections\": [
+                      {
+                        \"widgets\": [
+                          {
+                            \"image\": {
+                              \"imageUrl\": \"${IMAGE_URL}\"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }"
