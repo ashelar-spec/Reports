@@ -10,6 +10,7 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
@@ -52,7 +53,7 @@ jobs:
           IMAGE_URL="https://raw.githubusercontent.com/ashelar-spec/Reports/main/images/${FILENAME}"
 
           # 1. Post clickable image to Google Chat (no header, no button)
-          curl -f -s -S -X POST "$WEBHOOK_URL" \
+          curl --max-time 30 -f -s -S -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
               \"cardsV2\": [
@@ -82,7 +83,7 @@ jobs:
 
           # 2. Save image to Google Drive (auto-deleted after 30 days by Apps Script trigger)
           if [ -n "$DRIVE_WEBHOOK_URL" ]; then
-            curl -L -s -S -X POST "$DRIVE_WEBHOOK_URL" \
+            curl --max-time 30 -L -s -S -X POST "$DRIVE_WEBHOOK_URL" \
               -H "Content-Type: application/json" \
               -d "{\"imageUrl\": \"${IMAGE_URL}\", \"filename\": \"${FILENAME}\"}"
           fi
