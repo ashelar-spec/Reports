@@ -62,7 +62,12 @@ jobs:
                         \"widgets\": [
                           {
                             \"image\": {
-                              \"imageUrl\": \"${IMAGE_URL}\"
+                              \"imageUrl\": \"${IMAGE_URL}\",
+                              \"onClick\": {
+                                \"openLink\": {
+                                  \"url\": \"${IMAGE_URL}\"
+                                }
+                              }
                             }
                           }
                         ]
