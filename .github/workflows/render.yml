@@ -23,10 +23,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run render.js
+      - name: Decode HTML file
         env:
           HTML_BASE64: ${{ github.event.client_payload.html_base64 }}
+        run: echo "$HTML_BASE64" | base64 -d > .github/workflows/render.html
+
+      - name: Run render.js
+        env:
           WEBHOOK_URL: ${{ github.event.client_payload.webhook_url }}
           FILENAME: ${{ github.event.client_payload.filename }}
           TIMESTAMP: ${{ github.event.client_payload.timestamp }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/workflows/render.js
