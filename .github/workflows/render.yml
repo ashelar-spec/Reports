@@ -43,13 +43,15 @@ jobs:
           git commit -m "Add report image ${FILENAME}"
           git push
 
-      - name: Send Image Only to Google Chat
+      - name: Send Image Only to Google Chat & Save to Drive
         env:
           WEBHOOK_URL: ${{ github.event.client_payload.webhook_url }}
+          DRIVE_WEBHOOK_URL: ${{ github.event.client_payload.drive_webhook_url }}
           FILENAME: ${{ github.event.client_payload.filename }}
         run: |
           IMAGE_URL="https://raw.githubusercontent.com/ashelar-spec/Reports/main/images/${FILENAME}"
 
+          # 1. Post clickable image to Google Chat (no header, no button)
           curl -f -s -S -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
@@ -77,3 +79,10 @@ jobs:
                 }
               ]
             }"
+
+          # 2. Save image to Google Drive (auto-deleted after 30 days by Apps Script trigger)
+          if [ -n "$DRIVE_WEBHOOK_URL" ]; then
+            curl -L -s -S -X POST "$DRIVE_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"imageUrl\": \"${IMAGE_URL}\", \"filename\": \"${FILENAME}\"}"
+          fi
