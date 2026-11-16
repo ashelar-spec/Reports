@@ -1,0 +1,32 @@
+name: Render Table and Send to Google Chat
+
+on:
+  repository_dispatch:
+    types: [render_table]
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run render.js
+        env:
+          HTML_BASE64: ${{ github.event.client_payload.html_base64 }}
+          WEBHOOK_URL: ${{ github.event.client_payload.webhook_url }}
+          FILENAME: ${{ github.event.client_payload.filename }}
+          TIMESTAMP: ${{ github.event.client_payload.timestamp }}
+        run: node .github/workflows/render.js
